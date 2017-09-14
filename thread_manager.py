@@ -6,10 +6,7 @@ import tweepy
 from listener import FreqListener
 import db_handler as dbh
 import re
-from datetime import datetime
-
-
-
+import datetime
 
 
 auth = tweepy.OAuthHandler(twitter_consumer_key, twitter_consumer_secret)
@@ -17,11 +14,21 @@ auth.set_access_token(twitter_access_token, twitter_access_secret)
 
 api = tweepy.API(auth)
 
-coins = ['bitcoin, ethereum']
 
-tweet_table_template = '(id_str VARCHAR(20) NOT NULL, created_at TIME WITH TIME ZONE, text TEXT NOT NULL, user_info TEXT NOT NULL, retweets INTEGER, coins TEXT, language TEXT, lat REAL, long REAL, witheld_in_countries TEXT, place TEXT)'
+# NOTE: These three data structures are completely dependent on each other.
+# filters: all filters for tweepy.
+# coins: coin symbols in filters.
+# symbol_map: all filters that represent a coin.
+filters = ['bitcoin', 'ethereum', 'btc', 'eth']
+coins = ['eth', 'btc']
+symbols_map = {
+    'bitcoin': 'btc',
+    'ethereum': 'eth'
+}
 
-# tweet_table_template = '(text TEXT)'
+tweet_table_template = '(id_str VARCHAR(20) NOT NULL, created_at TIME WITH TIME ZONE, text TEXT NOT NULL, ' \
+                       'user_info TEXT NOT NULL, retweets INTEGER, coins TEXT, language TEXT, lat REAL, long REAL, ' \
+                       'witheld_in_countries TEXT, place TEXT)'
 
 
 def _start_and_wait_analyzer():
@@ -39,18 +46,32 @@ def _start_and_wait_analyzer():
     print("Main: analyzer says its done, lets start again!")
 
 
-def _set_timer():
+def _set_timer(hour=0, minute=0, second=0):
+    """
+    Blocks the calling thread until the time of the day specified by creating a timer and waiting for it to finish
+    return. For example, _set_timer(hour=17) will block the calling function until 5:00pm. If its 4:00pm, it will
+    return at 5:00pm of the same day, if its 6:00om it will return at 5:00pm of the next day.
+    :param hour: hour of the day (0-23)
+    :param minute: minute (0-59)
+    :param second: second (0-59)
+    :return: None
+    """
 
-    def null_funtion():
+    def null_function():
         return
 
-    x = datetime.today()
-    # y = x.replace(day=x.day + 1, hour=1, minute=0, second=0, microsecond=0)
-    y = x.replace(day=x.day, hour=x.hour, minute=x.minute, second=(x.second + 10) % 60, microsecond=x.microsecond)
-    delta_t = y - x
+    now = datetime.datetime.today()
+
+    # Here we set the time of the day we want to wait until.
+    target = now.replace(day=now.day, hour=hour, minute=minute, second=second)
+    if target > now:
+        delta_t = target - now
+    else:
+        delta_t = datetime.timedelta(days=1) - (now - target)
+
+    secs = delta_t.seconds
     print(delta_t)
-    secs = delta_t.seconds + 1
-    t = threading.Timer(secs, null_funtion)
+    t = threading.Timer(secs, null_function)
     t.start()
     t.join()
 
@@ -68,49 +89,74 @@ def run():
         """Listener thread function"""
 
         def unpacker(tweet):
-            # TODO check all not null
-
             unpacked_list = []
             unpacked_format = '('
 
+            # id_str
             unpacked_list.append(tweet['id_str'])  # id_str TEXT
             unpacked_format += '%s'
 
+            # created_at
             unpacked_list.append(re.search('[0-9]{2}:[0-9]{2}:[0-9]{2} \+[0-9]{4}',
-                                         tweet['created_at']).group(0)) # create_at TIME WITH TIME ZONE
+                                 tweet['created_at']).group(0)) # create_at TIME WITH TIME ZONE
             unpacked_format += ',%s'
 
+            # text
             unpacked_list.append(tweet['text'])
             unpacked_format += ',%s'
 
+            # user
             unpacked_list.append(str(tweet['user']))  # TODO get relevant info
             unpacked_format += ',%s'
 
-            unpacked_format += ',' + str(tweet['retweet_count'])  # TODO make function to get actual number of retweets
+            # retweet_count
+            unpacked_format += ',' + str(tweet['retweet_count'])  # TODO make function to get actual number of retweets (Ale)
 
-            #unpacked_list.append(get_coins) # TODO implement get_coins
-            unpacked_list.append('[bitcoin,ethereum]')
+            # TODO make sure to ignore tweets that dont mention the coin explicitly implement get_coins
+
+            # coins
+            coins_str = ''
+            coins_matched = []
+            for filter_ in filters:
+                print(tweet['text'])
+                match_obj = re.search(filter_, tweet['text'], re.IGNORECASE)
+                if match_obj:
+                    if filter_ in coins:
+                        if filter_ not in coins_matched:
+                            coins_matched.append(filter_)
+                            coins_str += filter_ + ','
+                    elif filter_ in symbols_map:
+                        if filter_ not in coins_matched:
+                            coins_matched.append(symbols_map[filter_])
+                            coins_str += symbols_map[filter_] + ','
+            coins_str = coins_str.strip(',')
+            print(coins_str)
+            unpacked_list.append(coins_str)
             unpacked_format += ',%s'
 
-            if tweet['lang'] is not None:
+            # lang
+            if tweet['lang']:
                 unpacked_list.append(tweet['lang'])
                 unpacked_format += ',%s'
             else:
-                unpacked_format += 'NULL'
+                unpacked_format += ',NULL'
 
-            if tweet['coordinates'] is not None:
+            # coordinates
+            if tweet['coordinates']:
                 unpacked_format += ',' + str(tweet['coordinates']['coordinates'][1])  # lat
                 unpacked_format += ',' + str(tweet['coordinates']['coordinates'][0])  # long
             else:
                 unpacked_format += ',NULL,NULL'
 
+            # withheld_in_countries
             if 'withheld_in_countries' in tweet:
                 unpacked_list.append(str(tweet['withheld_in_countries']))
                 unpacked_format += ',%s'
             else:
                 unpacked_format += ',NULL'
 
-            if tweet['place'] is not None:
+            # place
+            if tweet['place']:
                 unpacked_list.append(str(tweet['place']))
                 unpacked_format += ',%s'
             else:
@@ -123,7 +169,7 @@ def run():
             return '(%s)', [tweet['text']]
 
         stream = tweepy.Stream(auth, FreqListener(_db_handler, _table_name, unpacker))
-        stream.filter(track=coins)
+        stream.filter(track=filters)
 
     # Pre initialization
     # timer_lock = threading.Event()
@@ -145,7 +191,7 @@ def run():
                 listener_running = True
 
                 print("Main: Simulating one day")
-                _set_timer()
+                _set_timer(hour=23, minute=51)
 
                 print("Main: terminating listener")
                 listener.terminate()
@@ -161,6 +207,7 @@ def run():
             i += 1
         except KeyboardInterrupt:
             if listener_running:
+                pass
                 listener.terminate()
                 listener.join()
             break
