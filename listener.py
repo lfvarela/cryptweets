@@ -11,23 +11,8 @@ class FreqListener(StreamListener):
         self.unpacker = unpacker_function
         self.api = api
 
-    '''
-    def on_data(self, data):
-        try:
-            # print(json.loads(data)['text'])
-            tweet = json.loads(data)
-            self.db_handler.insert_tweet(self.table_name, tweet, self.unpacker)
-            return True
-        except BaseException as e:
-            print("Error on_data: {}".format(str(e)))
-        return True
-    '''
-
     def on_status(self, status):
         try:
-            # print(json.loads(data)['text'])
-            print("status")
-            print(status.text)
             self.db_handler.insert_tweet(self.table_name, status, self.unpacker)
         except BaseException as e:
             print("Error on_status: {}".format(str(e)))
