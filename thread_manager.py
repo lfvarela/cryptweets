@@ -126,7 +126,7 @@ def run():
             # retweet_count
             unpacked_format += ',' + str(tweet.retweet_count)  # TODO make function to get actual number of retweets (Ale)
 
-            # TODO make sure to ignore tweets that dont mention the coin explicitly implement get_coins
+
 
             # coins
             coins_str = ''
@@ -145,9 +145,9 @@ def run():
             coins_str = coins_str.strip(',')
             if coins_str == '':
                 # TODO: decide if we want to do something in case no coin is present on tweet.
+                # I like the unpacker idea
                 unpacked_format += ',NULL'
             else:
-                print(coins_str)
                 unpacked_list.append(coins_str)
                 unpacked_format += ',%s'
 
@@ -159,7 +159,7 @@ def run():
                 unpacked_format += ',NULL'
 
             # coordinates
-            if hasattr(tweet.coordinates, 'coordinates'):
+            if tweet.coordinates:
                 unpacked_format += ',' + str(tweet.coordinates.coordinates[1])  # lat
                 unpacked_format += ',' + str(tweet.coordinates.coordinates[0])  # long
             else:
