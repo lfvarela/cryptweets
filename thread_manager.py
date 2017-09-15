@@ -35,6 +35,7 @@ def _start_and_wait_analyzer():
 
     def analyzer_t():
         """Analyzer thread function"""
+        # TODO: IMPLEMENT ANALYZER ON ANALYZER.PY
         print("Handler: running, simulating my DB work for 5 seconds.")
         time.sleep(5)
         print("Handler: told main Im done with my work")
@@ -96,7 +97,6 @@ def run():
             unpacked_list.append(tweet.id_str)  # id_str TEXT
             unpacked_format += '%s'
 
-
             # created_at
             unpacked_list.append(re.search('[0-9]{2}:[0-9]{2}:[0-9]{2}',
                                  str(tweet.created_at)).group(0) + ' +0000')  # create_at TIME WITH TIME ZONE
@@ -124,9 +124,7 @@ def run():
             unpacked_format += ',%s'
 
             # retweet_count
-            unpacked_format += ',' + str(tweet.retweet_count)  # TODO make function to get actual number of retweets (Ale)
-
-
+            unpacked_format += ',' + str(tweet.retweet_count)
 
             # coins
             coins_str = ''
@@ -144,9 +142,8 @@ def run():
                             coins_str += symbols_map[filter_] + ','
             coins_str = coins_str.strip(',')
             if coins_str == '':
-                # TODO: decide if we want to do something in case no coin is present on tweet.
-                # I like the unpacker idea
                 unpacked_format += ',NULL'
+                return False, '', ''
             else:
                 unpacked_list.append(coins_str)
                 unpacked_format += ',%s'
@@ -160,8 +157,8 @@ def run():
 
             # coordinates
             if tweet.coordinates:
-                unpacked_format += ',' + str(tweet.coordinates.coordinates[1])  # lat
-                unpacked_format += ',' + str(tweet.coordinates.coordinates[0])  # long
+                unpacked_format += ',' + str(tweet.coordinates['coordinates'][1])  # lat
+                unpacked_format += ',' + str(tweet.coordinates['coordinates'][0])  # long
             else:
                 unpacked_format += ',NULL,NULL'
 
@@ -174,13 +171,13 @@ def run():
 
             # place
             if tweet.place:
-                unpacked_list.append(str(tweet.place))
+                unpacked_list.append(tweet.place.full_name)
                 unpacked_format += ',%s'
             else:
                 unpacked_format += ',NULL'
 
             unpacked_format += ')'
-            return unpacked_format, unpacked_list
+            return True, unpacked_format, unpacked_list
 
         stream = tweepy.Stream(auth, FreqListener(_db_handler, _table_name, unpacker, api,))
         stream.filter(track=filters)

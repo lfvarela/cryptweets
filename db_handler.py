@@ -1,3 +1,4 @@
+
 import psycopg2 as pg
 
 
@@ -60,26 +61,42 @@ class Handler:
             # resets cursor, otherwise any future executes will generate an InternalError
             self.con.rollback()
 
-    # def unpack_tweet(tweet):
-    #     '''Receives a tweet and unpacks the relevant information from the json.
-    #     It then returns a VALUES string in valid SQL format. IF ANY CHANGES ARE
-    #     MADE TO THE TWEETS TABLE BE SURE TO CHANGE THIS METHOD!'''
-
     def insert_tweet(self, table_name, tweet, unpacker):
-        '''Uses the unpacker function to unpack the tweet (ie to take information
+        """Uses the unpacker function to unpack the tweet (ie to take information
         in tweet and put it in the proper SQL format) and inserts that into the
         table specified by table name. It is important that the unpacker outputs
         values in a format that matches the columns of the specified table.
-        IMPORTANT: changes to the db won't be commited until the context closes.
-        this means you won't be able to read what you've written within the same context.
-        To change this there's an easy but costly fix. Simply add self.con.commit()
-        after the execute statement.'''
+        IMPORTANT: this method depends on table design!
+
+        Unpacker returns: [0] Success (boolean, represents if we want to insert in to table),
+        [1] unpacked_format (like
+        (%s,%s,NULL,4), values that use %s or %f or others should be appendend into the third return list),
+        [2] unpacked_list
+        (items that have to be formatted into format string. The reason for this is so strings like: you're (which
+        includes a colon) can be appended"""
+
         assert(self.cursor_is_active())
+        # original = tweet.get('retweeted_status', None)
+        original = None
+        if hasattr(tweet, 'retweeted_status'):
+            original = tweet.retweeted_status
+        if original:  # if original not None then tweet is a RT
+            result = self.query_list("SELECT retweets FROM {} WHERE id_str='{}';".format(table_name, original.id_str))
+            if result:
+                # This means the tweet is already in our db. We must increase it's RT count
+                try:
+                    self.query_list("UPDATE {} SET retweets={} WHERE id_str='{}';".format(table_name, result[0][0]+1, original.id_str))
+                    return
+                except pg.Error as e:
+                    print('Failed to update RT count. Rolling back connection. ERROR:', e)
+                    self.con.rollback()
 
         try:
-            # self.cur.execute('INSERT INTO {} VALUES {}'.format(table_name, unpacker(tweet)))
-            self.cur.execute('INSERT INTO {} VALUES {}'.format(table_name, unpacker(tweet)[0]), tuple(unpacker(tweet)[1]))
-            self.con.commit()
+            if unpacker(tweet)[0]:
+                self.cur.execute('INSERT INTO {} VALUES {}'.format(table_name, unpacker(tweet)[1]), tuple(unpacker(tweet)[2]))
+                self.con.commit()
+            else:
+                return
         except pg.Error as e:
             print('Failed to insert tweet. Rolling back connection. ERROR:', e)
             # resets cursor, otherwise any future executes will generate an InternalError
@@ -94,19 +111,29 @@ class Handler:
             # resets cursor, otherwise any future executes will generate an InternalError
             self.con.rollback()
         for result in self.cur:
-             yield result
+            yield result
 
-    def query(self, query): # This function might be a little dangerous, leaving it in nonetheless
-        '''A generator that executes whatever query and yields the esults one by
-        one. IMPORTANT: changes to the db won't be commited until the context closes.
-        this means you won't be able to read what you've written within the same context.
-        To change this there's an easy but costly fix. Simply add self.con.commit()
-        after the execute statement.'''
+    def query_generator(self, query, generator=False): # This function might be a little dangerous, leaving it in nonetheless
+        '''A generator that executes whatever query and yields the results one by
+        one.'''
         try:
             self.cur.execute(query)
+            self.con.commit()
+            for result in self.cur:
+                yield result
         except pg.Error as e:
             print('Query failed. Rolling back connection. ERROR:', e)
             # resets cursor, otherwise any future executes will generate an InternalError
             self.con.rollback()
-        for result in self.cur:
-            yield result
+
+    def query_list(self, query):
+        """Executes a query and resturns the output as a list."""
+        try:
+            self.cur.execute(query)
+            self.con.commit()
+            if self.cur.description:
+                return self.cur.fetchall()
+        except pg.Error as e:
+            print('Query failed. Rolling back connection. ERROR:', e)
+            # resets cursor, otherwise any future executes will generate an InternalError
+            self.con.rollback()
