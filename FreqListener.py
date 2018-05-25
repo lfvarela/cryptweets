@@ -13,6 +13,7 @@ class FreqListener(StreamListener):
 
     def on_status(self, status):
         try:
+            print(status.text)
             self.db_handler.insert_tweet(self.table_name, status, self.unpacker)
         except BaseException as e:
             print("Error on_status: {}".format(str(e)))
@@ -22,4 +23,3 @@ class FreqListener(StreamListener):
         if status_code == 420:
             return False
         return True
-

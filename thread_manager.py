@@ -62,7 +62,7 @@ def run():
 
             listener_t = multiprocessing.Process(target=listener.twitter_listener_t, args=(my_db_handler, table_name,))
             listener_t.start()
-            _set_timer(hour=17)
+            _set_timer(hour=23,minute=29)
 
             print("Main: terminating listener")
             listener_t.terminate()

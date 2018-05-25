@@ -70,13 +70,12 @@ class Handler:
 
         Unpacker returns: [0] Success (boolean, represents if we want to insert in to table),
         [1] unpacked_format (like
-        (%s,%s,NULL,4), values that use %s or %f or others should be appendend into the third return list),
+        (%s,%s,NULL,4), values that use %s or %f or others should be appended into the third return list),
         [2] unpacked_list
         (items that have to be formatted into format string. The reason for this is so strings like: you're (which
         includes a colon) can be appended"""
 
         assert(self.cursor_is_active())
-        # original = tweet.get('retweeted_status', None)
         original = None
         if hasattr(tweet, 'retweeted_status'):
             original = tweet.retweeted_status
